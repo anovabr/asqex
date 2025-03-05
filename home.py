@@ -292,7 +292,7 @@ if uploaded_file:
                 fig.add_shape(
                     type='line',
                     x0=mean, x1=mean,
-                    y0=0, y1=1,
+                    y0=0, y1=10,
                     line=dict(color='red', width=2, dash='dash'),
                     name='Mean'
                 )
@@ -310,7 +310,7 @@ if uploaded_file:
                     fig.add_shape(
                         type='line',
                         x0=perc_value, x1=perc_value,
-                        y0=0, y1=1,
+                        y0=0, y1=10,
                         line=dict(color=percentile_colors[perc_name], width=2),
                         name=f'{perc_name} Percentile'
                     )
