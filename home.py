@@ -4,7 +4,7 @@ import numpy as np
 import time  # For progress bar
 import plotly.graph_objs as go
 import plotly.express as px
-
+import tableone
 # Set up the title
 st.title("ASQ:EX Data Analysis Tool - Beta Version")
 
@@ -18,10 +18,20 @@ if "welcome_displayed" not in st.session_state:
 
 if not st.session_state.welcome_displayed:
     st.markdown(
-        "### Welcome to the ASQ:EX Data Analysis Tool (Beta Version) 🚀\n"
+        "### Welcome to the ASQ:EX Data Analysis Tool (Beta Version) 🦆🐺\n"
         "This tool helps with data processing and analysis.\n\n"
-        "🔹 **Upload your dataset** using the sidebar.\n"
-        "🔹 **Click the buttons on the left sidebar** to navigate through different sections."
+        "🚨 **IMPORTANT WORKFLOW INSTRUCTIONS** 🚨\n\n"
+        "1️⃣ **Upload Excel Dataframe**: \n"
+        "   - Use the sidebar to upload your Excel file\n"
+        "   - MUST be done FIRST, or nothing will work\n\n"
+        "   - You can click Data Information to make sure your data is correct\n\n"
+        "2️⃣ **Process Data**: \n"
+        "   - MANDATORY: Click 'Processing' button\n"
+        "   - Without processing, NO further analysis possible\n\n"
+        "3️⃣ **Analyze Data**: \n"
+        "   - After processing, you can now click 'Descriptives' or 'Cutoffs'\n\n"
+        "🔹**Updated on March 5 -- 00:01am.**\n\n"
+        "*Made with 🐍 Python by Luis Anunciacao*"
     )
     st.session_state.welcome_displayed = True
 
@@ -29,8 +39,26 @@ if not st.session_state.welcome_displayed:
 def set_view(view):
     st.session_state.current_view = view
 
+# Display a GIF from a web URL before the header
+st.sidebar.markdown("Duck out of town")
+gif_url = "https://jilldennison.com/wp-content/uploads/2024/09/cute-vid-1.gif"  # Replace with your URL
+st.sidebar.image(gif_url, use_container_width=True)
+
 # Sidebar: Upload Excel File First
+
 st.sidebar.header("Upload File")
+st.markdown(
+    """
+    <style>
+        div[data-testid="stFileUploader"] {
+            background-color: #007030 !important; /* Change this to your desired color */
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 uploaded_file = st.sidebar.file_uploader("Upload your Excel file", type=["xlsx", "xls"])
 
 # Sidebar: Navigation Buttons
@@ -187,9 +215,24 @@ if uploaded_file:
 
     # Cutoffs view
     elif st.session_state.current_view == "cutoffs":
+
         # Ensure cleaned data exists
         if st.session_state.get('cleaned_df') is not None:
             st.subheader("Cutoff Analysis")
+
+            # Add an informative text box
+            st.info("""
+            🔍 **Comprehensive Analysis Section**
+
+            In this section, you'll find:
+            - Descriptive statistics for ASQ:EX
+            - Proposed cutoffs
+            - ASQ-4 statistics
+            - Visualization plots to aid interpretation
+
+            ⏳ **Performance Note**: 
+            This section involves complex computational processes, so loading times may be longer than usual. Please be patient while the data is being processed and analyzed.
+            """)
 
             # Prepare the data
             cleaned_df = st.session_state.cleaned_df
@@ -273,6 +316,53 @@ if uploaded_file:
                 # Display cutoffs table
                 st.subheader("Observations Below Cutoffs")
                 st.dataframe(cutoffs_df)
+
+                # Add a loading spinner
+                with st.spinner('Loading ASQ Results Summary...'):
+                    # Simulate some processing time (optional)
+                    time.sleep(1)  # Optional: adds a deliberate delay to demonstrate loading
+
+                    # Load ASQ Results
+                    asq_df = pd.read_excel('1.asq_results ASQ4 - all.xlsx')
+
+                    # Progress bar for data processing
+                    progress_bar = st.progress(0)
+
+                    # Columns of interest
+                    columns_of_interest = ['quest', 'c_sum', 'gm_sum', 'fm_sum', 'cg_sum', 'ps_sum']
+
+                    # Update progress
+                    progress_bar.progress(25)
+
+                    # Group by 'quest' and calculate summary statistics
+                    summary_stats = asq_df.groupby('quest')[columns_of_interest[1:]].agg([
+                        ('Mean', 'mean'),
+                        ('SD', 'std'),
+                        ('10%', lambda x: x.quantile(0.1)),
+                        ('25%', lambda x: x.quantile(0.25)),
+                        ('50%', 'median'),
+                        ('75%', lambda x: x.quantile(0.75)),
+                        ('90%', lambda x: x.quantile(0.9))
+                    ])
+
+                    # Update progress
+                    progress_bar.progress(50)
+
+                    # Flatten multi-level column index
+                    summary_stats.columns = [f'{col[1]}_{col[0]}' for col in summary_stats.columns]
+
+                    # Reset index to make 'quest' a column again
+                    summary_stats = summary_stats.reset_index()
+
+                    # Update progress
+                    progress_bar.progress(75)
+
+                    # Display the summary table
+                    st.subheader("ASQ Results Summary")
+                    st.dataframe(summary_stats)
+
+                    # Complete progress
+                    progress_bar.progress(100)
 
                 # Plotly Density Plot
                 st.subheader("Density Plot")
