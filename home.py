@@ -7,10 +7,17 @@ import time  # For progress bar
 st.title("ASQ:EX Data Analysis Tool - Beta Version")
 
 # Display welcome message at startup
-st.markdown(
-    "### Welcome to the ASQ:EX Data Analysis Tool (Beta Version)\n"
-    "Please use the **buttons in the left sidebar** to navigate through different sections of the tool."
-)
+if "welcome_displayed" not in st.session_state:
+    st.session_state.welcome_displayed = False
+
+if not st.session_state.welcome_displayed:
+    st.markdown(
+        "### Welcome to the ASQ:EX Data Analysis Tool (Beta Version) 🚀\n"
+        "This tool helps with data processing and analysis.\n\n"
+        "🔹 **Upload your dataset** using the sidebar.\n"
+        "🔹 **Click the buttons on the left sidebar** to navigate through different sections."
+    )
+    st.session_state.welcome_displayed = True
 
 # Sidebar: Upload Excel File First
 st.sidebar.header("Upload File")
@@ -48,15 +55,35 @@ if uploaded_file:
     if data_processing_btn:
         st.subheader("Processing Data...")
 
-        # Function to clean data
+        # Show cleaning explanation
+        st.info(
+            "**The data will be cleaned as follows:**\n"
+            "- **Fully empty rows and columns will be removed**.\n"
+            "- **All dots (.)** will be treated as **missing values**.\n"
+            "- **Missing values before the first number** will be replaced with **2**.\n"
+            "- **Missing values after the last number** will be replaced with **0**.\n"
+            "- **Missing values between numbers** will be replaced with **2**.\n"
+            "- **A 'total' variable will be created** by summing numeric columns that contain `\"` (quotes) in their names."
+        )
+
+        # Function to clean data with a progress bar
         def clean_data(df):
-            # Remove fully empty rows and columns
+            progress = st.progress(0)  # Initialize progress bar
+
+            # Step 1: Remove fully empty rows and columns
             df.dropna(how="all", axis=0, inplace=True)  # Remove empty rows
             df.dropna(how="all", axis=1, inplace=True)  # Remove empty columns
-            df.columns = df.columns.str.lower()  # Convert all column names to lowercase
-            df.replace(".", np.nan, inplace=True)  # Convert all dots (".") to NaN
+            progress.progress(20)  # Update progress
 
-            # Apply missing value replacement rules row-wise
+            # Step 2: Convert all column names to lowercase
+            df.columns = df.columns.str.lower()
+            progress.progress(40)  # Update progress
+
+            # Step 3: Convert all dots (".") to NaN
+            df.replace(".", np.nan, inplace=True)
+            progress.progress(60)  # Update progress
+
+            # Step 4: Apply missing value replacement rules row-wise
             for i in range(len(df)):
                 row = df.iloc[i, :].values  # Get row values as an array
                 first_non_nan = np.where(~pd.isna(row))[0][0] if np.any(~pd.isna(row)) else None
@@ -71,12 +98,17 @@ if uploaded_file:
                         row[j] = 2  # Replace middle NaNs with 2
                 df.iloc[i, :] = row
 
-            # Compute Total Score (Sum Numeric Columns with Quotes in Their Names)
+            progress.progress(80)  # Update progress
+
+            # Step 5: Compute Total Score (Sum Numeric Columns with Quotes in Their Names)
             numeric_columns_with_quotes = [col for col in df.select_dtypes(include=["number"]).columns if '"' in col]
             if numeric_columns_with_quotes:
                 df["total"] = df[numeric_columns_with_quotes].sum(axis=1)
             else:
                 df["total"] = np.nan  # If no matching columns found, assign NaN
+
+            progress.progress(100)  # Processing complete
+            time.sleep(0.5)  # Small delay before removing the progress bar
 
             return df
 
@@ -100,29 +132,21 @@ if uploaded_file:
             non_numeric_columns = st.session_state.cleaned_df.select_dtypes(exclude=["number"]).columns.tolist()
             numeric_columns = st.session_state.cleaned_df.select_dtypes(include=["number"]).columns.tolist()
 
-            # List boxes for user selection
-            selected_non_numeric = st.selectbox("Select a non-numeric (grouping) variable:", ["None"] + non_numeric_columns)
-            selected_numeric = st.selectbox("Select a numeric variable:", ["None"] + numeric_columns)
+            # Default to first available option
+            selected_non_numeric = st.selectbox("Select a non-numeric (grouping) variable:", ["None"] + non_numeric_columns, index=1 if non_numeric_columns else 0)
+            selected_numeric = st.selectbox("Select a numeric variable:", ["None"] + numeric_columns, index=1 if numeric_columns else 0)
 
             # Ensure the table is always present
+            st.subheader("Descriptive Statistics")
             if selected_numeric != "None":
                 if selected_non_numeric == "None":
-                    # Compute statistics for the entire dataset
                     descriptive_table = st.session_state.cleaned_df[selected_numeric].describe().to_frame()
                 else:
-                    # Compute statistics grouped by the selected non-numeric variable
                     descriptive_table = st.session_state.cleaned_df.groupby(selected_non_numeric)[selected_numeric].describe()
 
-                # Display descriptive statistics
-                st.subheader("Descriptive Statistics")
                 st.write(descriptive_table)
             else:
-                # Placeholder message when no variables are selected
-                st.subheader("Descriptive Statistics")
-                st.write("⚠️ Please select variables to generate descriptive statistics.")
-
-        else:
-            st.warning("Please process the data first by clicking 'Processing'.")
+                st.write("⚠️ No numeric variable selected. Please choose one.")
 
     # If "Cutoffs" button is clicked -> Do Nothing (Placeholder)
     if cutoffs_btn:
