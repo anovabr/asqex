@@ -6,6 +6,10 @@ import time  # For progress bar
 # Set up the title
 st.title("ASQ:EX Data Analysis Tool - Beta Version")
 
+# Add a new session state variable to track current view
+if "current_view" not in st.session_state:
+    st.session_state.current_view = "welcome"
+
 # Display welcome message at startup
 if "welcome_displayed" not in st.session_state:
     st.session_state.welcome_displayed = False
@@ -19,16 +23,20 @@ if not st.session_state.welcome_displayed:
     )
     st.session_state.welcome_displayed = True
 
+# Function to set current view
+def set_view(view):
+    st.session_state.current_view = view
+
 # Sidebar: Upload Excel File First
 st.sidebar.header("Upload File")
 uploaded_file = st.sidebar.file_uploader("Upload your Excel file", type=["xlsx", "xls"])
 
 # Sidebar: Navigation Buttons
 st.sidebar.header("Options")
-data_info_btn = st.sidebar.button("Data Information")
-data_processing_btn = st.sidebar.button("Processing")
-descriptive_btn = st.sidebar.button("Descriptives")
-cutoffs_btn = st.sidebar.button("Cutoffs")
+data_info_btn = st.sidebar.button("Data Information", on_click=set_view, args=("data_info",))
+data_processing_btn = st.sidebar.button("Processing", on_click=set_view, args=("processing",))
+descriptive_btn = st.sidebar.button("Descriptives", on_click=set_view, args=("descriptives",))
+cutoffs_btn = st.sidebar.button("Cutoffs", on_click=set_view, args=("cutoffs",))
 
 # Initialize session state to store cleaned data
 if "cleaned_df" not in st.session_state:
@@ -40,19 +48,19 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file, sheet_name=None)
 
     # Let the user select a sheet if multiple exist
-    sheet_name = st.selectbox("Select a sheet", df.keys())
+    sheet_name = st.selectbox("Select a sheet", list(df.keys()))
     df = df[sheet_name]  # Load selected sheet into a DataFrame
 
-    # When "Data Information" is clicked -> Show dataset details
-    if data_info_btn:
+    # View handling
+    if st.session_state.current_view == "data_info":
         st.subheader("Dataset Information")
         st.write(f"✅ **Rows:** {df.shape[0]}")
         st.write(f"✅ **Columns:** {df.shape[1]}")
         st.subheader("Column Names")
         st.write(df.columns.tolist())
 
-    # If "Processing" button is clicked -> Process data
-    if data_processing_btn:
+    # Processing view
+    elif st.session_state.current_view == "processing":
         st.subheader("Processing Data...")
 
         # Show cleaning explanation
@@ -123,33 +131,60 @@ if uploaded_file:
         cleaned_file = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
         st.download_button(label="📥 Download Cleaned Data", data=cleaned_file, file_name="cleaned_data.csv", mime="text/csv")
 
-    # If "Descriptive" button is clicked -> Show two list boxes and compute descriptive table
-    if descriptive_btn:
-        if st.session_state.cleaned_df is not None:
+    # Descriptives view
+    elif st.session_state.current_view == "descriptives":
+        # Ensure cleaned data exists
+        if st.session_state.get('cleaned_df') is not None:
             st.subheader("Descriptive Analysis")
 
             # Identify non-numeric and numeric columns
-            non_numeric_columns = st.session_state.cleaned_df.select_dtypes(exclude=["number"]).columns.tolist()
-            numeric_columns = st.session_state.cleaned_df.select_dtypes(include=["number"]).columns.tolist()
+            cleaned_df = st.session_state.cleaned_df
+            non_numeric_columns = cleaned_df.select_dtypes(exclude=["number"]).columns.tolist()
+            numeric_columns = cleaned_df.select_dtypes(include=["number"]).columns.tolist()
 
-            # Default to first available option
-            selected_non_numeric = st.selectbox("Select a non-numeric (grouping) variable:", ["None"] + non_numeric_columns, index=1 if non_numeric_columns else 0)
-            selected_numeric = st.selectbox("Select a numeric variable:", ["None"] + numeric_columns, index=1 if numeric_columns else 0)
+            # Create columns for dropdowns
+            col1, col2 = st.columns(2)
 
-            # Ensure the table is always present
+            with col1:
+                # Unique key for non-numeric selector to prevent resets
+                selected_non_numeric = st.selectbox(
+                    "Select a non-numeric (grouping) variable:", 
+                    ["None"] + non_numeric_columns,
+                    key="non_numeric_group_select"
+                )
+
+            with col2:
+                # Unique key for numeric selector to prevent resets
+                selected_numeric = st.selectbox(
+                    "Select a numeric variable:", 
+                    ["None"] + numeric_columns,
+                    key="numeric_variable_select"
+                )
+
+            # Descriptive statistics container
             st.subheader("Descriptive Statistics")
+            
+            # Check if a numeric variable is selected
             if selected_numeric != "None":
-                if selected_non_numeric == "None":
-                    descriptive_table = st.session_state.cleaned_df[selected_numeric].describe().to_frame()
-                else:
-                    descriptive_table = st.session_state.cleaned_df.groupby(selected_non_numeric)[selected_numeric].describe()
-
-                st.write(descriptive_table)
+                try:
+                    # Two different computation paths
+                    if selected_non_numeric == "None":
+                        # Simple descriptive stats for a single numeric column
+                        descriptive_table = cleaned_df[selected_numeric].describe().to_frame()
+                        descriptive_table.columns = [selected_numeric]
+                        st.dataframe(descriptive_table)
+                    else:
+                        # Grouped descriptive stats
+                        descriptive_table = cleaned_df.groupby(selected_non_numeric)[selected_numeric].describe()
+                        st.dataframe(descriptive_table)
+                
+                except Exception as e:
+                    st.error(f"Error generating descriptive statistics: {str(e)}")
             else:
-                st.write("⚠️ No numeric variable selected. Please choose one.")
+                st.warning("Please select a numeric variable for analysis.")
 
-    # If "Cutoffs" button is clicked -> Do Nothing (Placeholder)
-    if cutoffs_btn:
+    # Cutoffs view (placeholder)
+    elif st.session_state.current_view == "cutoffs":
         st.subheader("Cutoffs (Coming Soon)")
         st.write("🚧 This section will be implemented soon.")
 
