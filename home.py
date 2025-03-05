@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time  # For progress bar
+import plotly.graph_objs as go
+import plotly.express as px
 
 # Set up the title
 st.title("ASQ:EX Data Analysis Tool - Beta Version")
@@ -183,10 +185,149 @@ if uploaded_file:
             else:
                 st.warning("Please select a numeric variable for analysis.")
 
-    # Cutoffs view (placeholder)
+    # Cutoffs view
     elif st.session_state.current_view == "cutoffs":
-        st.subheader("Cutoffs (Coming Soon)")
-        st.write("🚧 This section will be implemented soon.")
+        # Ensure cleaned data exists
+        if st.session_state.get('cleaned_df') is not None:
+            st.subheader("Cutoff Analysis")
+
+            # Prepare the data
+            cleaned_df = st.session_state.cleaned_df
+
+            # Identify non-numeric columns
+            non_numeric_columns = cleaned_df.select_dtypes(exclude=["number"]).columns.tolist()
+
+            # Create columns for dropdowns
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Grouping variable selector
+                selected_non_numeric = st.selectbox(
+                    "Select a non-numeric (grouping) variable:", 
+                    ["None"] + non_numeric_columns,
+                    key="cutoff_non_numeric_select"
+                )
+
+            with col2:
+                # Variable selector (currently only 'total')
+                selected_numeric = st.selectbox(
+                    "Select a numeric variable:", 
+                    ["total"],  # Currently only 'total'
+                    key="cutoff_numeric_select"
+                )
+
+            # Compute statistics
+            if selected_numeric:
+                # Prepare the dataframe for analysis
+                if selected_non_numeric == "None":
+                    # No grouping
+                    analysis_df = cleaned_df
+                else:
+                    # Group by the selected non-numeric variable
+                    analysis_df = cleaned_df
+
+                # Compute statistics
+                total_var = analysis_df[selected_numeric]
+                
+                # Descriptive statistics
+                mean = total_var.mean()
+                std = total_var.std()
+                
+                # Percentiles
+                percentiles = {
+                    '10%': total_var.quantile(0.1),
+                    '25%': total_var.quantile(0.25),
+                    '50%': total_var.quantile(0.5),
+                    '75%': total_var.quantile(0.75),
+                    '90%': total_var.quantile(0.9)
+                }
+
+                # Prepare statistics table
+                stats_data = {
+                    'Statistic': ['Mean', 'Standard Deviation'] + list(percentiles.keys()),
+                    'Value': [mean, std] + list(percentiles.values())
+                }
+                stats_df = pd.DataFrame(stats_data)
+                
+                # Display statistics table
+                st.subheader("Descriptive Statistics")
+                st.dataframe(stats_df)
+
+                # Compute observations below different cutoffs
+                cutoffs_data = {
+                    'Cutoff': [
+                        'Below Mean - 2 SD', 
+                        'Below Mean - 1 SD', 
+                        'Below 10th Percentile', 
+                        'Below 25th Percentile'
+                    ],
+                    'Number of Observations': [
+                        sum(total_var < (mean - 2*std)),
+                        sum(total_var < (mean - std)),
+                        sum(total_var < percentiles['10%']),
+                        sum(total_var < percentiles['25%'])
+                    ]
+                }
+                cutoffs_df = pd.DataFrame(cutoffs_data)
+                
+                # Display cutoffs table
+                st.subheader("Observations Below Cutoffs")
+                st.dataframe(cutoffs_df)
+
+                # Plotly Density Plot
+                st.subheader("Density Plot")
+                
+                # Create density plot
+                fig = go.Figure()
+                
+                # Add density trace
+                fig.add_trace(go.Histogram(
+                    x=total_var, 
+                    name='Density',
+                    histnorm='density',
+                    opacity=0.7
+                ))
+                
+                # Add vertical lines for key statistics
+                fig.add_shape(
+                    type='line',
+                    x0=mean, x1=mean,
+                    y0=0, y1=1,
+                    line=dict(color='red', width=2, dash='dash'),
+                    name='Mean'
+                )
+                
+                # Add percentile lines
+                percentile_colors = {
+                    '10%': 'green',
+                    '25%': 'blue',
+                    '50%': 'purple',
+                    '75%': 'orange',
+                    '90%': 'brown'
+                }
+                
+                for perc_name, perc_value in percentiles.items():
+                    fig.add_shape(
+                        type='line',
+                        x0=perc_value, x1=perc_value,
+                        y0=0, y1=1,
+                        line=dict(color=percentile_colors[perc_name], width=2),
+                        name=f'{perc_name} Percentile'
+                    )
+                
+                # Customize layout
+                fig.update_layout(
+                    title='Density Distribution with Statistical Markers',
+                    xaxis_title=selected_numeric,
+                    yaxis_title='Density',
+                    barmode='overlay'
+                )
+                
+                # Display the plot
+                st.plotly_chart(fig)
+
+            else:
+                st.warning("Please select a variable for analysis.")
 
 else:
     st.warning("Please upload an Excel file to proceed.")
